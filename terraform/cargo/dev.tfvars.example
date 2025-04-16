@@ -1,0 +1,13 @@
+# Example Terraform variables for the 'dev' environment
+# In a real scenario, this file (or its contents) would be dynamically
+# generated or pulled from a secure source (e.g., GCS, Secret Manager)
+# during the CI/CD pipeline (see .github/workflows/deploy.yaml).
+
+project_id = "your-gcp-dev-project-id" # <-- REPLACE THIS
+region     = "us-central1"
+zone       = "us-central1-a"
+
+# Add other environment-specific variables needed by your hull configuration
+# e.g.:
+# network_name = "dev-vpc"
+# cluster_name = "dev-gke-cluster" 

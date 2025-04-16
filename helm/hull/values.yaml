@@ -1,0 +1,9 @@
+# Helm Hull Values
+# Contains base configuration values for Helm charts.
+# These are typically non-sensitive, static defaults.
+# Environment-specific overrides go into helm/cargo/.
+
+# Example: You might put default resource requests/limits here,
+# common labels, or default ingress settings.
+
+# (Leave empty for now, assuming chart defaults are sufficient) 

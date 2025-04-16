@@ -1,0 +1,23 @@
+# Example Helm override values for the 'dev' environment
+# In a real scenario, this file (or its contents) would be dynamically
+# generated or pulled from a secure source (e.g., GCS, Secret Manager)
+# during the CI/CD pipeline (see .github/workflows/deploy.yaml).
+
+replicaCount: 1
+
+image:
+  tag: "develop" # Use the develop branch tag for dev environment
+
+service:
+  type: ClusterIP # Dev might not need a LoadBalancer
+
+# Add other dev-specific overrides, e.g.,
+# ingress:
+#   enabled: false
+# resources:
+#   limits:
+#     cpu: 100m
+#     memory: 128Mi
+#   requests:
+#     cpu: 50m
+#     memory: 64Mi 

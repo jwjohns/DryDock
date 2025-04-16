@@ -1,0 +1,116 @@
+name: Drydock Deploy
+
+on:
+  push:
+    branches:
+      - main # Or your default branch
+
+permissions:
+  contents: read
+  id-token: write # Required for WIF
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud via WIF
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: 'projects/YOUR_GCP_PROJECT_ID/locations/global/workloadIdentityPools/YOUR_POOL_ID/providers/YOUR_PROVIDER_ID' # Replace with your WIF provider
+          service_account: 'your-terraform-sa@YOUR_GCP_PROJECT_ID.iam.gserviceaccount.com' # Replace with your SA email
+
+      # --- Cargo Pulling Steps ---
+      # Fetch dynamic configuration and secrets using the authenticated gcloud/gsutil SDK.
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        # This action is required for gcloud and gsutil commands
+
+      - name: Pull Terraform Cargo (GCS Example)
+        run: |
+          echo "Fetching Terraform variables from GCS..."
+          # Example: Fetch environment-specific tfvars from a bucket
+          # gsutil cp gs://your-config-bucket/terraform/dev.tfvars terraform/cargo/environment.auto.tfvars
+          # Replace bucket name and path accordingly.
+          # Copying the example file for demonstration purposes:
+          cp terraform/cargo/dev.tfvars.example terraform/cargo/environment.auto.tfvars
+          echo "TF Vars Contents:"
+          cat terraform/cargo/environment.auto.tfvars
+
+      - name: Pull Helm Overrides (GCS Example)
+        run: |
+          echo "Fetching Helm overrides from GCS..."
+          # Example: Fetch environment-specific Helm overrides from a bucket
+          # gsutil cp gs://your-config-bucket/helm/dev-overrides.yaml helm/cargo/environment-overrides.yaml
+          # Replace bucket name and path accordingly.
+          # Copying the example file for demonstration purposes:
+          cp helm/cargo/dev-overrides.yaml.example helm/cargo/environment-overrides.yaml
+          echo "Helm Overrides Contents:"
+          cat helm/cargo/environment-overrides.yaml
+
+      - name: Pull Secrets (Secret Manager Example)
+        run: |
+          echo "Fetching secrets from Secret Manager..."
+          # Example: Fetch a database password and append it to a tfvars file
+          # Ensure the WIF Service Account has roles/secretmanager.secretAccessor
+          # DB_PASSWORD=$(gcloud secrets versions access latest --secret="your-db-password-secret-name" --project="YOUR_GCP_PROJECT_ID")
+          # echo "db_password = \"$DB_PASSWORD\"" >> terraform/cargo/secrets.auto.tfvars
+
+          # Example: Fetch Helm secrets and create a Kubernetes secret manifest
+          # API_KEY=$(gcloud secrets versions access latest --secret="your-api-key-secret-name" --project="YOUR_GCP_PROJECT_ID")
+          # cat <<EOF > helm/cargo/secrets.yaml
+          # apiVersion: v1
+          # kind: Secret
+          # metadata:
+          #   name: my-app-secrets
+          # type: Opaque
+          # data:
+          #   apiKey: $(echo -n "$API_KEY" | base64)
+          # EOF
+          # You would then apply this manifest, or include it in your Helm chart
+          echo "Placeholder step for Secret Manager integration."
+
+      # --- Terraform Steps ---
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: latest # Or pin to a specific version
+
+      - name: Terraform Init
+        id: init
+        run: terraform -chdir=terraform/hull init
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform -chdir=terraform/hull plan \
+            -var-file=../cargo/environment.auto.tfvars \ # Example cargo file
+            -out=tfplan
+          # Add other -var-file arguments as needed based on pulled cargo
+
+      - name: Terraform Apply
+        id: apply
+        run: terraform -chdir=terraform/hull apply -auto-approve tfplan
+
+      # --- Helm Steps ---
+      - name: Setup Helm
+        uses: azure/setup-helm@v4 # Installs Helm CLI
+
+      # Placeholder: Add step to configure kubectl context if needed
+      # - name: Get GKE Credentials
+      #   uses: google-github-actions/get-gke-credentials@v1
+      #   with:
+      #     cluster_name: your-cluster-name # Replace
+      #     location: your-cluster-location # Replace
+
+      - name: Helm Deploy/Upgrade
+        run: |
+          helm upgrade --install my-release-name ./helm/charts/example \
+            -f ./helm/hull/values.yaml \
+            -f ./helm/cargo/environment-overrides.yaml \ # Example cargo file
+            --namespace my-namespace \
+            --create-namespace
+          # Add other -f arguments as needed based on pulled cargo
+          # Adjust chart path, release name, namespace as needed
