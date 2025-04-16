@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.png" alt="Drydock Logo" width="150">
+  <img src="docs/logo.png" alt="Drydock Logo" width="150">
 </p>
 
 # **Drydock: Git-Native Deployments for Secure, Scalable Infrastructure**

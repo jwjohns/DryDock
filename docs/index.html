@@ -1,30 +1,78 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Drydock - Git-Native Deployments</title>
-    <!-- Link to Pico.css CDN -->
+    <title>Drydock - Git-Native Deployments for Secure Infrastructure</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
-    <!-- Removed link to style.css -->
+    <style>
+        /* Simple custom styles */
+        .logo {
+            max-width: 100px;
+            margin-bottom: 1rem;
+        }
+        header {
+            text-align: center;
+            padding: 2rem 0 1rem 0;
+            border-bottom: 1px solid var(--pico-muted-border-color);
+            margin-bottom: 2rem;
+        }
+        section {
+            margin-bottom: 3rem;
+        }
+        article {
+            padding: 1.5rem;
+            border: 1px solid var(--pico-card-border-color);
+            border-radius: var(--pico-card-border-radius);
+            background-color: var(--pico-card-background-color);
+            margin-bottom: 1.5rem;
+        }
+        hgroup h2 {
+            margin-bottom: 0.5rem;
+        }
+        hgroup h3 {
+            color: var(--pico-muted-color);
+            margin-bottom: 1rem;
+        }
+        ul {
+             list-style: disc;
+             padding-left: 1.5rem;
+        }
+        li {
+            margin-bottom: 0.5rem;
+        }
+        .get-started-buttons div[role="group"] {
+            display: flex;
+            gap: 1rem; /* Add space between buttons */
+            justify-content: center;
+        }
+        footer {
+            text-align: center; 
+            margin-top: 4rem; 
+            padding: 1rem; 
+            font-size: 0.9rem; 
+            color: var(--pico-muted-color);
+            border-top: 1px solid var(--pico-muted-border-color);
+        }
+    </style>
 </head>
 <body>
-    <!-- Using Pico's container class for centered content -->
     <div class="container">
-        <header style="text-align: center; padding: 2rem 0;"> <!-- Inline style for simple centering -->
-            <img src="../logo.png" alt="Drydock Logo" style="max-width: 100px; margin-bottom: 1rem;"> <!-- Inline style for logo -->
+        <header>
+            <img src="logo.png" alt="Drydock Logo" class="logo">
             <h1>Drydock</h1>
             <p><em>Separating the "Hull" (Static Infrastructure) from the "Cargo" (Dynamic Configuration) across <strong>GCP and Azure</strong>.</em></p>
         </header>
 
         <main>
-            <article>
+
+            <section id="mission">
                 <hgroup>
                     <h2>Mission</h2>
                     <h3>What is Drydock?</h3>
                 </hgroup>
                 <p>
-                    <strong>Drydock</strong> is an open source deployment framework designed to separate static infrastructure ("the hull") 
+                    Drydock is an open source deployment framework designed to separate static infrastructure ("the hull") 
                     from dynamic configuration and secrets ("the cargo"), enabling secure, scalable, and reproducible deployments 
                     across GCP and Azure (initially) using GitHub Actions, Terraform, Helm, and Workload Identity Federation (WIF).
                 </p>
@@ -32,20 +80,71 @@
                     It's purpose-built for modern teams moving away from legacy Jenkins-based deploys, toward 
                     <strong>zero-key, auditable, Git-native automation</strong>.
                 </p>
-            </article>
+            </section>
 
-            <article>
+            <section id="philosophy">
+                 <hgroup>
+                    <h2>Core Philosophy</h2>
+                    <h3>Hull vs. Cargo</h3>
+                </hgroup>
+                <p>In a shipyard drydock, the hull is constructed before it's ever launched into water. Drydock adopts this metaphor:</p>
+                <ul>
+                    <li><strong>The Hull</strong> = statically defined, versioned infrastructure & Helm templates (managed in Git).</li>
+                    <li><strong>The Cargo</strong> = runtime values, secrets, and overrides injected securely at deployment time (fetched from Secret Manager, Key Vault, GCS, Blob Storage, etc.).</li>
+                </ul>
+                <p>This separation ensures your infrastructure code is clean and secrets are never stored in your repository.</p>
+            </section>
+            
+            <section id="features">
+                <hgroup>
+                    <h2>Key Features</h2>
+                    <h3>Why Use Drydock?</h3>
+                </hgroup>
+                <article>
+                    <ul>
+                        <li><strong>Workload Identity Federation (WIF):</strong> Eliminate long-lived cloud credentials in CI/CD for GCP and Azure.</li>
+                        <li><strong>Environment-specific Layering:</strong> Use Terraform <code>.tfvars</code> and Helm overrides for distinct configurations per environment.</li>
+                        <li><strong>Secure Runtime Injection:</strong> "Cargo" (secrets, runtime config) is fetched and injected only at deploy-time.</li>
+                        <li><strong>GitHub Actions Native:</strong> Designed with composable GitHub Actions workflows at its core.</li>
+                        <li><strong>Multi-Cloud Ready:</strong> Supports parallel definitions for GCP and Azure infrastructure.</li>
+                        <li><strong>Fleet Deployment Support:</strong> Structure adaptable for deploying across many stores, regions, or environments.</li>
+                    </ul>
+                </article>
+            </section>
+
+            <section id="workflow">
+                <hgroup>
+                    <h2>How it Works</h2>
+                    <h3>Simplified Workflow</h3>
+                </hgroup>
+                <ol>
+                    <li>Commit static templates (Terraform Hulls, Helm Charts) to Git.</li>
+                    <li>Trigger GitHub Actions (on push, tag, or manual dispatch).</li>
+                    <li>Action authenticates to the target cloud (GCP/Azure) using WIF.</li>
+                    <li>Action fetches runtime "Cargo" (<code>.tfvars</code>, Helm overrides, secrets) from secure sources (Secret Manager, Key Vault, GCS, etc.).</li>
+                    <li>Action runs <code>terraform apply</code> using the appropriate Hull + Cargo.</li>
+                    <li>Action runs <code>helm upgrade --install</code> using the base chart + Hull values + Cargo overrides.</li>
+                </ol>
+            </section>
+
+             <section id="why">
+                <h2>Why Drydock?</h2>
+                <p>Most teams hack this flow together in CI — Drydock makes it <strong>a pattern, not a pile of scripts</strong>. It's Git-native, secure by default using WIF, modular, and designed for multi-cloud, multi-environment scale.</p>
+            </section>
+
+            <section id="get-started" class="get-started-buttons">
                 <h2>Get Started</h2>
-                <div role="group"> <!-- Group buttons semantically -->
+                <div role="group">
                     <a href="https://github.com/jwjohns/DryDock" role="button">View on GitHub</a>
                     <a href="https://github.com/jwjohns/DryDock/blob/main/README.md" role="button" class="secondary">Read the Docs (README)</a>
                 </div>
-            </article>
+            </section>
+
         </main>
 
-        <footer style="text-align: center; margin-top: 4rem; padding: 1rem; font-size: 0.9rem; color: var(--pico-muted-color);"> <!-- Use Pico variable -->
+        <footer>
             &copy; 2024 Drydock Project Contributors.
         </footer>
-    </div> <!-- end container -->
+    </div>
 </body>
 </html> 
