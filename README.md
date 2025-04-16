@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.png" alt="Drydock Logo" width="150">
+</p>
+
 # **Drydock: Git-Native Deployments for Secure, Scalable Infrastructure**
 
 *Separating the "Hull" (Static Infrastructure) from the "Cargo" (Dynamic Configuration) across **GCP and Azure**.*
