@@ -100,10 +100,3 @@ In a shipyard drydock, the hull is constructed before it's ever launched into wa
 Most teams hack this flow together in CI — Drydock makes it **a pattern, not a pile of scripts**. It's Git-native, secure, modular, and easy to adopt incrementally.
 
 ---
-
-Want the next steps?  
-I can generate:
-- A working example repo with `terraform + helm + gha + wif`
-- GitHub Actions templates  
-- Drydock CLI scaffold  
-- Branding elements/logos if you want it to stand out on GitHub
