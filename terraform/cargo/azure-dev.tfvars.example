@@ -1,0 +1,13 @@
+# Example Terraform variables for the Azure 'dev' environment
+# In a real scenario, this file (or its contents) would be dynamically
+# generated or pulled from a secure source (e.g., Azure Blob Storage, Key Vault)
+# during the CI/CD pipeline.
+
+subscription_id = "your-azure-dev-subscription-id" # <-- REPLACE THIS
+tenant_id       = "your-azure-tenant-id"             # <-- REPLACE THIS
+location        = "East US"
+
+# Add other environment-specific variables needed by your Azure hull configuration
+# e.g.:
+# resource_group_name = "dev-rg"
+# cluster_name        = "dev-aks-cluster" 

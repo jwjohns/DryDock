@@ -1,0 +1,17 @@
+# Example Helm override values for the Azure 'dev' environment
+# In a real scenario, this file (or its contents) would be dynamically
+# generated or pulled from a secure source (e.g., Azure Blob Storage, Key Vault)
+# during the CI/CD pipeline.
+
+replicaCount: 1
+
+image:
+  tag: "develop-azure" # Potentially different tag for Azure builds/base images
+
+service:
+  type: LoadBalancer
+  # Example Azure-specific annotation for internal load balancer:
+  # annotations:
+  #   service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+
+# Add other dev-specific overrides, potentially different from GCP dev 

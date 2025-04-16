@@ -1,6 +1,6 @@
 # **Drydock: Git-Native Deployments for Secure, Scalable Infrastructure**
 
-*Separating the "Hull" (Static Infrastructure) from the "Cargo" (Dynamic Configuration)*
+*Separating the "Hull" (Static Infrastructure) from the "Cargo" (Dynamic Configuration) across **GCP and Azure**.*
 
 [![Build Status](https://github.com/YOUR_ORG/YOUR_REPO/actions/workflows/deploy.yaml/badge.svg)](https://github.com/YOUR_ORG/YOUR_REPO/actions/workflows/deploy.yaml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) <!-- Replace MIT with your license -->
@@ -11,7 +11,7 @@
 
 ## **Mission**
 
-**Drydock** is an open source deployment framework designed to **separate static infrastructure ("the hull") from dynamic configuration and secrets ("the cargo")**, enabling secure, scalable, and reproducible deployments across any environment using:
+**Drydock** is an open source deployment framework designed to **separate static infrastructure ("the hull") from dynamic configuration and secrets ("the cargo")**, enabling secure, scalable, and reproducible deployments across **GCP and Azure** (initially) using:
 
 - **GitHub Actions**  
 - **Terraform**  
@@ -47,32 +47,37 @@ In a shipyard drydock, the hull is constructed before it's ever launched into wa
 ```
 .
 ├── .github/workflows/
-│   └── deploy.yaml          # GitHub Actions pipeline
+│   └── deploy.yaml          # Multi-cloud GitHub Actions pipeline (GCP/Azure)
 ├── terraform/
-│   ├── modules/             # Shared bones (infra templates)
-│   ├── hull/                # Static infra configs
+│   ├── modules/             # Shared infra modules (cloud-agnostic or specific)
+│   ├── hull-gcp/            # Static GCP infra configs (e.g., GKE, VPC)
+│   ├── hull-azure/          # Static Azure infra configs (e.g., AKS, VNET)
 │   └── cargo/               # Dynamic env-specific tfvars pulled at runtime
+│       ├── dev.tfvars.example # GCP dev example
+│       └── azure-dev.tfvars.example # Azure dev example
 ├── helm/
-│   ├── charts/              # Helm charts
-│   ├── hull/                # Base values
-│   └── cargo/               # Env overrides from secrets manager or GCS
+│   ├── charts/              # Helm charts (e.g., ./example)
+│   ├── hull/                # Base Helm values (common defaults)
+│   └── cargo/               # Env/Cloud specific Helm overrides
+│       ├── dev-overrides.yaml.example # GCP dev example
+│       └── azure-dev-overrides.yaml.example # Azure dev example
 └── scripts/
-    └── render.sh            # Optional local render for dry-run/debug
+    └── render.sh            # Optional local render for dry-run/debug (e.g., ./render.sh azure)
 ```
 
 ---
 
 ## **Workflow**
 
-1. **Commit** static templates (Helm & Terraform modules) to GitHub
-2. **Trigger** GitHub Actions on push or tag
-3. **Authenticate** via WIF to GCP using OIDC token (no service account keys)
-4. **Pull runtime config** from:
-   - GCP Secret Manager
-   - GCS
-   - Optional Vault or SSM in future
-5. **Render manifests**
-6. **Deploy using `terraform apply` and `helm upgrade`**
+1. **Select Target:** Choose Cloud (`gcp` or `azure`) and Environment (`dev`, `prod`, etc.) via GitHub Actions manual trigger inputs (or use defaults for push triggers).
+2. **Commit** static templates (Helm & Terraform modules/hulls) to GitHub.
+3. **Trigger** GitHub Actions on push, tag, or manual dispatch.
+4. **Authenticate** via WIF to the selected cloud (GCP or Azure) using OIDC token.
+5. **Pull runtime config ("Cargo")** for the specific cloud/environment from sources like:
+   - GCP Secret Manager / Azure Key Vault
+   - GCS / Azure Blob Storage
+6. **Render manifests** using fetched cargo files.
+7. **Deploy using `terraform apply` (in the correct hull directory) and `helm upgrade`** against the target cluster (GKE or AKS).
 
 ---
 

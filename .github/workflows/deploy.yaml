@@ -1,116 +1,161 @@
-name: Drydock Deploy
+name: Drydock Multi-Cloud Deploy
 
 on:
   push:
     branches:
       - main # Or your default branch
+  workflow_dispatch:
+    inputs:
+      cloud:
+        description: 'Target cloud provider'
+        required: true
+        default: 'gcp'
+        type: choice
+        options:
+          - gcp
+          - azure
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'dev'
+        type: string
+      # Add other inputs if needed, e.g., specific version tag
 
 permissions:
   contents: read
-  id-token: write # Required for WIF
+  id-token: write # Required for BOTH GCP and Azure WIF
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # Set environment variables for easy access in steps
+    env:
+      CLOUD_TARGET: ${{ github.event.inputs.cloud || 'gcp' }} # Default to gcp if not manually triggered
+      ENV_TARGET: ${{ github.event.inputs.environment || 'dev' }} # Default to dev if not manually triggered
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # === GCP Authentication (Conditional) ===
       - name: Authenticate to Google Cloud via WIF
+        if: env.CLOUD_TARGET == 'gcp'
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: 'projects/YOUR_GCP_PROJECT_ID/locations/global/workloadIdentityPools/YOUR_POOL_ID/providers/YOUR_PROVIDER_ID' # Replace with your WIF provider
-          service_account: 'your-terraform-sa@YOUR_GCP_PROJECT_ID.iam.gserviceaccount.com' # Replace with your SA email
+          workload_identity_provider: 'projects/YOUR_GCP_PROJECT_ID/locations/global/workloadIdentityPools/YOUR_POOL_ID/providers/YOUR_PROVIDER_ID' # Replace with your GCP WIF provider
+          service_account: 'your-terraform-sa@YOUR_GCP_PROJECT_ID.iam.gserviceaccount.com' # Replace with your GCP SA email
+
+      # === Azure Authentication (Conditional) ===
+      - name: Login to Azure via WIF
+        if: env.CLOUD_TARGET == 'azure'
+        uses: azure/login@v1
+        with:
+          client-id: 'YOUR_AZURE_CLIENT_ID' # Replace with Azure AD App Registration Client ID enabled for WIF
+          tenant-id: 'YOUR_AZURE_TENANT_ID' # Replace with Azure AD Tenant ID
+          subscription-id: 'YOUR_AZURE_SUBSCRIPTION_ID' # Replace with Azure Subscription ID
+          enable-AzPSSession: false # Set to true if you need PowerShell Az module
 
       # --- Cargo Pulling Steps ---
-      # Fetch dynamic configuration and secrets using the authenticated gcloud/gsutil SDK.
+      # Setup required SDKs based on cloud
       - name: Setup Google Cloud SDK
+        if: env.CLOUD_TARGET == 'gcp'
         uses: google-github-actions/setup-gcloud@v2
-        # This action is required for gcloud and gsutil commands
 
-      - name: Pull Terraform Cargo (GCS Example)
+      - name: Setup Azure CLI
+        if: env.CLOUD_TARGET == 'azure'
+        uses: azure/setup-azure-cli@v1
+
+      # Determine Cargo File Paths
+      - name: Set Cargo File Paths
+        id: set_paths
         run: |
-          echo "Fetching Terraform variables from GCS..."
-          # Example: Fetch environment-specific tfvars from a bucket
-          # gsutil cp gs://your-config-bucket/terraform/dev.tfvars terraform/cargo/environment.auto.tfvars
-          # Replace bucket name and path accordingly.
-          # Copying the example file for demonstration purposes:
-          cp terraform/cargo/dev.tfvars.example terraform/cargo/environment.auto.tfvars
+          if [ "${{ env.CLOUD_TARGET }}" == "azure" ]; then
+            echo "tf_cargo_src=terraform/cargo/azure-${{ env.ENV_TARGET }}.tfvars.example" >> $GITHUB_OUTPUT
+            echo "helm_cargo_src=helm/cargo/azure-${{ env.ENV_TARGET }}.overrides.yaml.example" >> $GITHUB_OUTPUT
+            echo "tf_hull_dir=terraform/hull-azure" >> $GITHUB_OUTPUT
+          else # Default to gcp
+            echo "tf_cargo_src=terraform/cargo/${{ env.ENV_TARGET }}.tfvars.example" >> $GITHUB_OUTPUT
+            echo "helm_cargo_src=helm/cargo/${{ env.ENV_TARGET }}.overrides.yaml.example" >> $GITHUB_OUTPUT
+            echo "tf_hull_dir=terraform/hull-gcp" >> $GITHUB_OUTPUT
+          fi
+          echo "tf_cargo_dest=terraform/cargo/environment.auto.tfvars" >> $GITHUB_OUTPUT
+          echo "helm_cargo_dest=helm/cargo/environment-overrides.yaml" >> $GITHUB_OUTPUT
+
+      # Pull Cargo (Examples - REPLACE WITH ACTUAL LOGIC)
+      - name: Pull Terraform Cargo (Simulated)
+        run: |
+          echo "Simulating pull of Terraform cargo from ${{ steps.set_paths.outputs.tf_cargo_src }}"
+          # REPLACE with actual gsutil cp (if gcp) or az storage blob download (if azure)
+          cp ${{ steps.set_paths.outputs.tf_cargo_src }} ${{ steps.set_paths.outputs.tf_cargo_dest }}
           echo "TF Vars Contents:"
-          cat terraform/cargo/environment.auto.tfvars
+          cat ${{ steps.set_paths.outputs.tf_cargo_dest }}
 
-      - name: Pull Helm Overrides (GCS Example)
+      - name: Pull Helm Overrides (Simulated)
         run: |
-          echo "Fetching Helm overrides from GCS..."
-          # Example: Fetch environment-specific Helm overrides from a bucket
-          # gsutil cp gs://your-config-bucket/helm/dev-overrides.yaml helm/cargo/environment-overrides.yaml
-          # Replace bucket name and path accordingly.
-          # Copying the example file for demonstration purposes:
-          cp helm/cargo/dev-overrides.yaml.example helm/cargo/environment-overrides.yaml
+          echo "Simulating pull of Helm cargo from ${{ steps.set_paths.outputs.helm_cargo_src }}"
+          # REPLACE with actual gsutil cp (if gcp) or az storage blob download (if azure)
+          cp ${{ steps.set_paths.outputs.helm_cargo_src }} ${{ steps.set_paths.outputs.helm_cargo_dest }}
           echo "Helm Overrides Contents:"
-          cat helm/cargo/environment-overrides.yaml
+          cat ${{ steps.set_paths.outputs.helm_cargo_dest }}
 
-      - name: Pull Secrets (Secret Manager Example)
+      - name: Pull Secrets (Simulated - Add Cloud Specific Logic)
         run: |
-          echo "Fetching secrets from Secret Manager..."
-          # Example: Fetch a database password and append it to a tfvars file
-          # Ensure the WIF Service Account has roles/secretmanager.secretAccessor
-          # DB_PASSWORD=$(gcloud secrets versions access latest --secret="your-db-password-secret-name" --project="YOUR_GCP_PROJECT_ID")
-          # echo "db_password = \"$DB_PASSWORD\"" >> terraform/cargo/secrets.auto.tfvars
+          echo "Simulating pulling secrets for ${{ env.CLOUD_TARGET }}..."
+          # REPLACE with actual gcloud secrets (if gcp) or az keyvault secret show (if azure)
+          if [ "${{ env.CLOUD_TARGET }}" == "azure" ]; then
+            echo "Azure Secret Pull logic would go here (using az keyvault)"
+            # Example: API_KEY=$(az keyvault secret show --name your-api-key --vault-name your-keyvault-name --query value -o tsv)
+          else
+            echo "GCP Secret Pull logic would go here (using gcloud secrets)"
+            # Example: API_KEY=$(gcloud secrets versions access latest --secret="your-api-key-secret-name" --project="YOUR_GCP_PROJECT_ID")
+          fi
+          # Example: Create secrets.auto.tfvars or secrets.yaml based on fetched secrets
+          # echo "api_key = \"$API_KEY\"" > terraform/cargo/secrets.auto.tfvars
 
-          # Example: Fetch Helm secrets and create a Kubernetes secret manifest
-          # API_KEY=$(gcloud secrets versions access latest --secret="your-api-key-secret-name" --project="YOUR_GCP_PROJECT_ID")
-          # cat <<EOF > helm/cargo/secrets.yaml
-          # apiVersion: v1
-          # kind: Secret
-          # metadata:
-          #   name: my-app-secrets
-          # type: Opaque
-          # data:
-          #   apiKey: $(echo -n "$API_KEY" | base64)
-          # EOF
-          # You would then apply this manifest, or include it in your Helm chart
-          echo "Placeholder step for Secret Manager integration."
-
-      # --- Terraform Steps ---
+      # --- Terraform Steps --- (Uses Hull Dir from set_paths step)
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: latest # Or pin to a specific version
 
       - name: Terraform Init
         id: init
-        run: terraform -chdir=terraform/hull init
+        run: terraform -chdir=${{ steps.set_paths.outputs.tf_hull_dir }} init
 
       - name: Terraform Plan
         id: plan
         run: |
-          terraform -chdir=terraform/hull plan \
-            -var-file=../cargo/environment.auto.tfvars \ # Example cargo file
+          terraform -chdir=${{ steps.set_paths.outputs.tf_hull_dir }} plan \
+            -var-file=../cargo/environment.auto.tfvars \ # Standardized destination name
+            # Add -var-file=../cargo/secrets.auto.tfvars if secrets are pulled into TF vars
             -out=tfplan
-          # Add other -var-file arguments as needed based on pulled cargo
 
       - name: Terraform Apply
         id: apply
-        run: terraform -chdir=terraform/hull apply -auto-approve tfplan
+        run: terraform -chdir=${{ steps.set_paths.outputs.tf_hull_dir }} apply -auto-approve tfplan
 
-      # --- Helm Steps ---
+      # --- Helm Steps --- (May need cloud-specific context setup)
       - name: Setup Helm
-        uses: azure/setup-helm@v4 # Installs Helm CLI
+        uses: azure/setup-helm@v4
 
-      # Placeholder: Add step to configure kubectl context if needed
-      # - name: Get GKE Credentials
-      #   uses: google-github-actions/get-gke-credentials@v1
-      #   with:
-      #     cluster_name: your-cluster-name # Replace
-      #     location: your-cluster-location # Replace
+      # Placeholder: Add step to configure kubectl context
+      # This step WILL LIKELY need to be conditional based on CLOUD_TARGET
+      - name: Get K8s Credentials (Placeholder - Needs Cloud Logic)
+        run: |
+          echo "Getting K8s credentials for ${{ env.CLOUD_TARGET }} environment ${{ env.ENV_TARGET }}"
+          if [ "${{ env.CLOUD_TARGET }}" == "azure" ]; then
+            echo "Azure Logic: az aks get-credentials --resource-group <rg> --name <aks_name> ..."
+            # az aks get-credentials --resource-group YOUR_RG --name YOUR_AKS_CLUSTER --subscription YOUR_AZURE_SUBSCRIPTION_ID
+          else
+            echo "GCP Logic: gcloud container clusters get-credentials ..."
+            # gcloud container clusters get-credentials YOUR_GKE_CLUSTER --region YOUR_GCP_REGION --project YOUR_GCP_PROJECT_ID
+          fi
+          echo "Kubeconfig setup placeholder complete."
 
       - name: Helm Deploy/Upgrade
         run: |
-          helm upgrade --install my-release-name ./helm/charts/example \
+          helm upgrade --install ${{ env.CLOUD_TARGET }}-${{ env.ENV_TARGET }}-release ./helm/charts/example \
             -f ./helm/hull/values.yaml \
-            -f ./helm/cargo/environment-overrides.yaml \ # Example cargo file
+            -f ${{ steps.set_paths.outputs.helm_cargo_dest }} \ # Standardized destination name
+            # Add -f helm/cargo/secrets.yaml if secrets are pulled into Helm manifests/values
             --namespace my-namespace \
             --create-namespace
-          # Add other -f arguments as needed based on pulled cargo
-          # Adjust chart path, release name, namespace as needed
+          # Adjust release name, namespace as needed
