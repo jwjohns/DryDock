@@ -22,7 +22,7 @@
 - **Helm**  
 - **Workload Identity Federation (WIF)** (GCP-native, AWS/IAM support roadmap)
 
-It's purpose-built for modern teams moving away from legacy Jenkins-based deploys, toward **zero-key, auditable, Git-native automation**.
+It's purpose-built for modern teams moving away from legacy Jenkins-based deploys, toward **zero-key, auditable, Git-native automation**. For guidance on this transition, see our [Migrating from Jenkins Guide](MIGRATING_FROM_JENKINS.md).
 
 ---
 
