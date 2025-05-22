@@ -9,7 +9,7 @@ The primary deployment workflow is defined in `.github/workflows/deploy.yaml`. I
 The workflow performs the following key operations:
 1. Authenticates to the target cloud (GCP or Azure) using WIF.
 2. Fetches environment-specific configuration ("cargo") from cloud storage.
-3. Fetches secrets (not yet fully implemented, but cleanup is in place).
+3. Fetches secrets from GCP Secret Manager or Azure Key Vault, making them available as temporary files for Terraform and Helm.
 4. Lints and validates Terraform and Helm configurations.
 5. Deploys Terraform infrastructure.
 6. Deploys Helm charts to Kubernetes.
@@ -41,6 +41,9 @@ The following GitHub Secrets must be created in your repository (`Settings -> Se
 *   `AZURE_AKS_RESOURCE_GROUP`: The name of the Azure Resource Group containing your AKS cluster.
 *   `AZURE_AKS_CLUSTER_NAME`: The name of your AKS cluster.
 
+**Cloud Secret Vault Secrets:**
+*   `AZURE_KEY_VAULT_NAME`: The name of your Azure Key Vault instance from which secrets will be pulled (e.g., `myproject-kv`). (Required if using Azure and want to pull secrets from Key Vault).
+
 ### 2. Cargo File Setup
 
 "Cargo" files provide environment-specific configurations for your Terraform and Helm deployments. These files are *not* stored in the Git repository but are fetched by the workflow from your cloud storage provider during deployment.
@@ -71,11 +74,42 @@ The `<environment_name>` corresponds to the `environment` input provided when di
 **Example Files:**
 The repository contains example cargo files in `terraform/cargo/` and `helm/cargo/` (e.g., `dev.tfvars.example`, `azure-dev-override.yaml.example`). You can use these as templates for creating your actual cargo files in cloud storage. Remember to remove the `.example` suffix for the files stored in the cloud.
 
-### 3. Secrets Management (Workflow Internal)
+### 3. Secrets Management in Cloud Vaults
 
-The workflow is designed to handle secrets securely.
-*   If the (future) secret pulling mechanism creates temporary files like `terraform/cargo/secrets.auto.tfvars` or `helm/cargo/secrets.yaml`, these are automatically cleaned up at the end of the workflow.
-*   These filenames are also included in `.gitignore` to prevent accidental commits.
+The workflow can pull secrets directly from GCP Secret Manager or Azure Key Vault. These secrets are then made available to Terraform as a `.tfvars` file and to Helm as a YAML values file.
+
+**Configuration in Your Cloud Vault:**
+
+You need to create secrets in your cloud provider's vault with specific names and content formats for the workflow to retrieve them:
+
+*   **Terraform Secrets File (`terraform/cargo/secrets.auto.tfvars`):**
+    *   **GCP Secret Manager Secret ID:** `tf-secrets.auto.tfvars`
+    *   **Azure Key Vault Secret Name:** `tf-secrets-auto-tfvars` (Note: periods are replaced with hyphens for Azure Key Vault compatibility).
+    *   **Content Format (HCL):** The content of this secret should be in HCL format, suitable for a `.tfvars` file. Example:
+        ```hcl
+        api_key = "abcdef123456"
+        db_password = "supersecretpassword"
+        ```
+
+*   **Helm Secrets File (`helm/cargo/secrets.yaml`):**
+    *   **GCP Secret Manager Secret ID:** `helm-secrets.yaml`
+    *   **Azure Key Vault Secret Name:** `helm-secrets-yaml`
+    *   **Content Format (YAML):** The content of this secret should be in YAML format, suitable for a Helm values file. Example:
+        ```yaml
+        replicaApiKey: "xyz7890123"
+        ingress:
+          tlsSecretName: "my-tls-secret-from-vault"
+        ```
+
+**Workflow Behavior:**
+
+*   During the "Pull Secrets" step, the workflow attempts to fetch these secrets based on the `CLOUD_TARGET`.
+*   If a secret is found and pulled:
+    *   Its content is saved to `terraform/cargo/secrets.auto.tfvars` or `helm/cargo/secrets.yaml` in the runner.
+    *   These files are then automatically used by the `terraform validate`, `terraform plan`, `helm lint`, and `helm upgrade` commands.
+*   If a secret is not found in the vault (or if there's a permissions issue), a warning is logged, the corresponding local file (`secrets.auto.tfvars` or `secrets.yaml`) will be empty, and the workflow continues. Terraform or Helm might fail later if they critically depend on a missing secret.
+*   These temporary secret files are always cleaned up at the end of the workflow run.
+*   The filenames `terraform/cargo/secrets.auto.tfvars` and `helm/cargo/secrets.yaml` are included in `.gitignore`.
 
 ## Running the Workflow
 

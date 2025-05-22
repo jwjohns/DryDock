@@ -122,22 +122,81 @@ jobs:
         run: |
           helm lint ./helm/charts/example \
             -f ./helm/hull/values.yaml \
-            -f ${{ steps.set_paths.outputs.helm_cargo_dest }}
-          # Add -f helm/cargo/secrets.yaml to the lint command above if/when secrets are pulled into that Helm values file.
+            -f ${{ steps.set_paths.outputs.helm_cargo_dest }} \
+            -f helm/cargo/secrets.yaml
 
-      - name: Pull Secrets (Simulated - Add Cloud Specific Logic)
+      - name: Pull Secrets
         run: |
-          echo "Simulating pulling secrets for ${{ env.CLOUD_TARGET }}..."
-          # REPLACE with actual gcloud secrets (if gcp) or az keyvault secret show (if azure)
-          if [ "${{ env.CLOUD_TARGET }}" == "azure" ]; then
-            echo "Azure Secret Pull logic would go here (using az keyvault)"
-            # Example: API_KEY=$(az keyvault secret show --name your-api-key --vault-name your-keyvault-name --query value -o tsv)
+          # Initialize empty secret files or ensure directory exists
+          mkdir -p terraform/cargo helm/cargo
+          touch terraform/cargo/secrets.auto.tfvars
+          touch helm/cargo/secrets.yaml
+          echo "Initialized potential secret files."
+
+          if [ "${{ env.CLOUD_TARGET }}" == "gcp" ]; then
+            echo "Pulling secrets for GCP from Secret Manager..."
+            
+            # Pull Terraform secrets
+            if gcloud secrets versions access latest --secret="tf-secrets.auto.tfvars" --project="${{ secrets.GCP_PROJECT_ID }}" > terraform/cargo/secrets.auto.tfvars; then
+              echo "Successfully pulled tf-secrets.auto.tfvars from GCP Secret Manager."
+              if [ ! -s terraform/cargo/secrets.auto.tfvars ]; then
+                echo "Warning: tf-secrets.auto.tfvars was pulled but is empty."
+              fi
+            else
+              echo "Warning: Failed to pull tf-secrets.auto.tfvars from GCP Secret Manager. Terraform will proceed without these secrets. Ensure the secret exists and permissions are correct if it's required."
+              # Ensure the file is empty if pull failed, as gcloud might create an empty file on some errors before exiting.
+              > terraform/cargo/secrets.auto.tfvars
+            fi
+
+            # Pull Helm secrets
+            if gcloud secrets versions access latest --secret="helm-secrets.yaml" --project="${{ secrets.GCP_PROJECT_ID }}" > helm/cargo/secrets.yaml; then
+              echo "Successfully pulled helm-secrets.yaml from GCP Secret Manager."
+              if [ ! -s helm/cargo/secrets.yaml ]; then
+                echo "Warning: helm-secrets.yaml was pulled but is empty."
+              fi
+            else
+              echo "Warning: Failed to pull helm-secrets.yaml from GCP Secret Manager. Helm will proceed without these secrets. Ensure the secret exists and permissions are correct if it's required."
+              # Ensure the file is empty if pull failed.
+              > helm/cargo/secrets.yaml
+            fi
+
+          elif [ "${{ env.CLOUD_TARGET }}" == "azure" ]; then
+            echo "Pulling secrets for Azure from Key Vault ${{ secrets.AZURE_KEY_VAULT_NAME }}..."
+
+            # Pull Terraform secrets
+            # Azure Key Vault secret name for 'tf-secrets.auto.tfvars' is 'tf-secrets-auto-tfvars'
+            if az keyvault secret show --name "tf-secrets-auto-tfvars" --vault-name "${{ secrets.AZURE_KEY_VAULT_NAME }}" --query value -o tsv > terraform/cargo/secrets.auto.tfvars; then
+              echo "Successfully pulled tf-secrets-auto-tfvars from Azure Key Vault."
+              if [ ! -s terraform/cargo/secrets.auto.tfvars ]; then
+                echo "Warning: tf-secrets-auto-tfvars was pulled but is empty."
+              fi
+            else
+              echo "Warning: Failed to pull tf-secrets-auto-tfvars from Azure Key Vault. Terraform will proceed without these secrets. Ensure the secret exists and permissions are correct if it's required."
+              # Ensure the file is empty if pull failed.
+              > terraform/cargo/secrets.auto.tfvars
+            fi
+
+            # Pull Helm secrets
+            # Azure Key Vault secret name for 'helm-secrets.yaml' is 'helm-secrets-yaml'
+            if az keyvault secret show --name "helm-secrets-yaml" --vault-name "${{ secrets.AZURE_KEY_VAULT_NAME }}" --query value -o tsv > helm/cargo/secrets.yaml; then
+              echo "Successfully pulled helm-secrets-yaml from Azure Key Vault."
+              if [ ! -s helm/cargo/secrets.yaml ]; then
+                echo "Warning: helm-secrets-yaml was pulled but is empty."
+              fi
+            else
+              echo "Warning: Failed to pull helm-secrets-yaml from Azure Key Vault. Helm will proceed without these secrets. Ensure the secret exists and permissions are correct if it's required."
+              # Ensure the file is empty if pull failed.
+              > helm/cargo/secrets.yaml
+            fi
           else
-            echo "GCP Secret Pull logic would go here (using gcloud secrets)"
-            # Example: API_KEY=$(gcloud secrets versions access latest --secret="your-api-key-secret-name" --project="YOUR_GCP_PROJECT_ID")
+            echo "Warning: Unknown CLOUD_TARGET '${{ env.CLOUD_TARGET }}' for pulling secrets."
           fi
-          # Example: Create secrets.auto.tfvars or secrets.yaml based on fetched secrets
-          # echo "api_key = \"$API_KEY\"" > terraform/cargo/secrets.auto.tfvars
+
+          echo "Secret pulling step complete."
+          echo "Terraform secrets (first 5 lines):"
+          head -n 5 terraform/cargo/secrets.auto.tfvars || true
+          echo "Helm secrets (first 5 lines):"
+          head -n 5 helm/cargo/secrets.yaml || true
 
       # --- Terraform Steps --- (Uses Hull Dir from set_paths step)
       - name: Setup Terraform
@@ -153,15 +212,15 @@ jobs:
       - name: Terraform Validate
         run: |
           terraform -chdir=${{ steps.set_paths.outputs.tf_hull_dir }} validate \
-            -var-file=../cargo/environment.auto.tfvars
-          # Add -var-file=../cargo/secrets.auto.tfvars to the validate command above if/when secrets are pulled into that TF vars file.
+            -var-file=../cargo/environment.auto.tfvars \
+            -var-file=../cargo/secrets.auto.tfvars
 
       - name: Terraform Plan
         id: plan
         run: |
           terraform -chdir=${{ steps.set_paths.outputs.tf_hull_dir }} plan \
-            -var-file=../cargo/environment.auto.tfvars \ # Standardized destination name
-            # Add -var-file=../cargo/secrets.auto.tfvars if secrets are pulled into TF vars
+            -var-file=../cargo/environment.auto.tfvars \
+            -var-file=../cargo/secrets.auto.tfvars \
             -out=tfplan
 
       - name: Terraform Apply
@@ -191,8 +250,8 @@ jobs:
         run: |
           helm upgrade --install ${{ env.CLOUD_TARGET }}-${{ env.ENV_TARGET }}-release ./helm/charts/example \
             -f ./helm/hull/values.yaml \
-            -f ${{ steps.set_paths.outputs.helm_cargo_dest }} \ # Standardized destination name
-            # Add -f helm/cargo/secrets.yaml if secrets are pulled into Helm manifests/values
+            -f ${{ steps.set_paths.outputs.helm_cargo_dest }} \
+            -f helm/cargo/secrets.yaml \
             --namespace my-namespace \
             --create-namespace
           # Adjust release name, namespace as needed
