@@ -83,6 +83,8 @@ In a shipyard drydock, the hull is constructed before it's ever launched into wa
 6. **Render manifests** using fetched cargo files.
 7. **Deploy using `terraform apply` (in the correct hull directory) and `helm upgrade`** against the target cluster (GKE or AKS).
 
+For detailed instructions on configuring the necessary GitHub Secrets and setting up your cargo files in cloud storage, please see the [Drydock Workflow Usage and Configuration Guide](USAGE.md).
+
 ---
 
 ## **Security Model**
