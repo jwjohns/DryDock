@@ -42,17 +42,17 @@ jobs:
         if: env.CLOUD_TARGET == 'gcp'
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: 'projects/YOUR_GCP_PROJECT_ID/locations/global/workloadIdentityPools/YOUR_POOL_ID/providers/YOUR_PROVIDER_ID' # Replace with your GCP WIF provider
-          service_account: 'your-terraform-sa@YOUR_GCP_PROJECT_ID.iam.gserviceaccount.com' # Replace with your GCP SA email
+          workload_identity_provider: '${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}' # Replace with your GCP WIF provider
+          service_account: '${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}' # Replace with your GCP SA email
 
       # === Azure Authentication (Conditional) ===
       - name: Login to Azure via WIF
         if: env.CLOUD_TARGET == 'azure'
         uses: azure/login@v1
         with:
-          client-id: 'YOUR_AZURE_CLIENT_ID' # Replace with Azure AD App Registration Client ID enabled for WIF
-          tenant-id: 'YOUR_AZURE_TENANT_ID' # Replace with Azure AD Tenant ID
-          subscription-id: 'YOUR_AZURE_SUBSCRIPTION_ID' # Replace with Azure Subscription ID
+          client-id: '${{ secrets.AZURE_CLIENT_ID }}' # Replace with Azure AD App Registration Client ID enabled for WIF
+          tenant-id: '${{ secrets.AZURE_TENANT_ID }}' # Replace with Azure AD Tenant ID
+          subscription-id: '${{ secrets.AZURE_SUBSCRIPTION_ID }}' # Replace with Azure Subscription ID
           enable-AzPSSession: false # Set to true if you need PowerShell Az module
 
       # --- Cargo Pulling Steps ---
@@ -71,7 +71,7 @@ jobs:
         run: |
           if [ "${{ env.CLOUD_TARGET }}" == "azure" ]; then
             echo "tf_cargo_src=terraform/cargo/azure-${{ env.ENV_TARGET }}.tfvars.example" >> $GITHUB_OUTPUT
-            echo "helm_cargo_src=helm/cargo/azure-${{ env.ENV_TARGET }}.overrides.yaml.example" >> $GITHUB_OUTPUT
+            echo "helm_cargo_src=helm/cargo/azure-${{ env.ENV_TARGET }}.override.yaml.example" >> $GITHUB_OUTPUT
             echo "tf_hull_dir=terraform/hull-azure" >> $GITHUB_OUTPUT
           else # Default to gcp
             echo "tf_cargo_src=terraform/cargo/${{ env.ENV_TARGET }}.tfvars.example" >> $GITHUB_OUTPUT
@@ -82,21 +82,48 @@ jobs:
           echo "helm_cargo_dest=helm/cargo/environment-overrides.yaml" >> $GITHUB_OUTPUT
 
       # Pull Cargo (Examples - REPLACE WITH ACTUAL LOGIC)
-      - name: Pull Terraform Cargo (Simulated)
+      - name: Pull Terraform Cargo
         run: |
-          echo "Simulating pull of Terraform cargo from ${{ steps.set_paths.outputs.tf_cargo_src }}"
-          # REPLACE with actual gsutil cp (if gcp) or az storage blob download (if azure)
-          cp ${{ steps.set_paths.outputs.tf_cargo_src }} ${{ steps.set_paths.outputs.tf_cargo_dest }}
-          echo "TF Vars Contents:"
-          cat ${{ steps.set_paths.outputs.tf_cargo_dest }}
+          echo "Pulling Terraform cargo for ${{ env.CLOUD_TARGET }}/${{ env.ENV_TARGET }} into ${{ steps.set_paths.outputs.tf_cargo_dest }}"
 
-      - name: Pull Helm Overrides (Simulated)
+          if [ "${{ env.CLOUD_TARGET }}" == "gcp" ]; then
+            echo "Source: gs://${{ secrets.GCP_CARGO_BUCKET }}/terraform/${{ env.ENV_TARGET }}.tfvars"
+            gsutil cp "gs://${{ secrets.GCP_CARGO_BUCKET }}/terraform/${{ env.ENV_TARGET }}.tfvars" "${{ steps.set_paths.outputs.tf_cargo_dest }}"
+          elif [ "${{ env.CLOUD_TARGET }}" == "azure" ]; then
+            echo "Source Blob: terraform/azure-${{ env.ENV_TARGET }}.tfvars"
+            az storage blob download --account-name "${{ secrets.AZURE_CARGO_STORAGE_ACCOUNT }}" --container-name "${{ secrets.AZURE_CARGO_CONTAINER }}" --name "terraform/azure-${{ env.ENV_TARGET }}.tfvars" --file "${{ steps.set_paths.outputs.tf_cargo_dest }}" --auth-mode login --overwrite
+          else
+            echo "Error: Unknown CLOUD_TARGET '${{ env.CLOUD_TARGET }}' for pulling Terraform cargo."
+            exit 1
+          fi
+
+          echo "TF Vars Contents (first 10 lines):"
+          head -n 10 "${{ steps.set_paths.outputs.tf_cargo_dest }}" || true # Use || true to prevent failure if file is empty or very short
+
+      - name: Pull Helm Overrides
         run: |
-          echo "Simulating pull of Helm cargo from ${{ steps.set_paths.outputs.helm_cargo_src }}"
-          # REPLACE with actual gsutil cp (if gcp) or az storage blob download (if azure)
-          cp ${{ steps.set_paths.outputs.helm_cargo_src }} ${{ steps.set_paths.outputs.helm_cargo_dest }}
-          echo "Helm Overrides Contents:"
-          cat ${{ steps.set_paths.outputs.helm_cargo_dest }}
+          echo "Pulling Helm overrides for ${{ env.CLOUD_TARGET }}/${{ env.ENV_TARGET }} into ${{ steps.set_paths.outputs.helm_cargo_dest }}"
+
+          if [ "${{ env.CLOUD_TARGET }}" == "gcp" ]; then
+            echo "Source: gs://${{ secrets.GCP_CARGO_BUCKET }}/helm/${{ env.ENV_TARGET }}.override.yaml"
+            gsutil cp "gs://${{ secrets.GCP_CARGO_BUCKET }}/helm/${{ env.ENV_TARGET }}.override.yaml" "${{ steps.set_paths.outputs.helm_cargo_dest }}"
+          elif [ "${{ env.CLOUD_TARGET }}" == "azure" ]; then
+            echo "Source Blob: helm/azure-${{ env.ENV_TARGET }}.override.yaml"
+            az storage blob download --account-name "${{ secrets.AZURE_CARGO_STORAGE_ACCOUNT }}" --container-name "${{ secrets.AZURE_CARGO_CONTAINER }}" --name "helm/azure-${{ env.ENV_TARGET }}.override.yaml" --file "${{ steps.set_paths.outputs.helm_cargo_dest }}" --auth-mode login --overwrite
+          else
+            echo "Error: Unknown CLOUD_TARGET '${{ env.CLOUD_TARGET }}' for pulling Helm overrides."
+            exit 1
+          fi
+
+          echo "Helm Overrides Contents (first 10 lines):"
+          head -n 10 "${{ steps.set_paths.outputs.helm_cargo_dest }}" || true # Use || true to prevent failure if file is empty or very short
+
+      - name: Helm Lint
+        run: |
+          helm lint ./helm/charts/example \
+            -f ./helm/hull/values.yaml \
+            -f ${{ steps.set_paths.outputs.helm_cargo_dest }}
+          # Add -f helm/cargo/secrets.yaml to the lint command above if/when secrets are pulled into that Helm values file.
 
       - name: Pull Secrets (Simulated - Add Cloud Specific Logic)
         run: |
@@ -120,6 +147,15 @@ jobs:
         id: init
         run: terraform -chdir=${{ steps.set_paths.outputs.tf_hull_dir }} init
 
+      - name: Terraform Format Check
+        run: terraform -chdir=${{ steps.set_paths.outputs.tf_hull_dir }} fmt --check
+
+      - name: Terraform Validate
+        run: |
+          terraform -chdir=${{ steps.set_paths.outputs.tf_hull_dir }} validate \
+            -var-file=../cargo/environment.auto.tfvars
+          # Add -var-file=../cargo/secrets.auto.tfvars to the validate command above if/when secrets are pulled into that TF vars file.
+
       - name: Terraform Plan
         id: plan
         run: |
@@ -138,17 +174,18 @@ jobs:
 
       # Placeholder: Add step to configure kubectl context
       # This step WILL LIKELY need to be conditional based on CLOUD_TARGET
-      - name: Get K8s Credentials (Placeholder - Needs Cloud Logic)
+      - name: Get K8s Credentials
         run: |
           echo "Getting K8s credentials for ${{ env.CLOUD_TARGET }} environment ${{ env.ENV_TARGET }}"
           if [ "${{ env.CLOUD_TARGET }}" == "azure" ]; then
-            echo "Azure Logic: az aks get-credentials --resource-group <rg> --name <aks_name> ..."
-            # az aks get-credentials --resource-group YOUR_RG --name YOUR_AKS_CLUSTER --subscription YOUR_AZURE_SUBSCRIPTION_ID
+            az aks get-credentials --resource-group "${{ secrets.AZURE_AKS_RESOURCE_GROUP }}" --name "${{ secrets.AZURE_AKS_CLUSTER_NAME }}" --subscription "${{ secrets.AZURE_SUBSCRIPTION_ID }}" --admin false --overwrite-existing
+          elif [ "${{ env.CLOUD_TARGET }}" == "gcp" ]; then
+            gcloud container clusters get-credentials "${{ secrets.GKE_CLUSTER_NAME }}" --region "${{ secrets.GCP_REGION }}" --project "${{ secrets.GCP_PROJECT_ID }}"
           else
-            echo "GCP Logic: gcloud container clusters get-credentials ..."
-            # gcloud container clusters get-credentials YOUR_GKE_CLUSTER --region YOUR_GCP_REGION --project YOUR_GCP_PROJECT_ID
+            echo "Error: Unknown CLOUD_TARGET '${{ env.CLOUD_TARGET }}' for getting K8s credentials."
+            exit 1
           fi
-          echo "Kubeconfig setup placeholder complete."
+          echo "Kubeconfig setup complete for ${{ env.CLOUD_TARGET }}."
 
       - name: Helm Deploy/Upgrade
         run: |
@@ -159,3 +196,10 @@ jobs:
             --namespace my-namespace \
             --create-namespace
           # Adjust release name, namespace as needed
+
+      - name: Cleanup Temporary Secret Files
+        if: always()
+        run: |
+          rm -f terraform/cargo/secrets.auto.tfvars
+          rm -f helm/cargo/secrets.yaml
+          echo "Temporary secret files cleaned up."
