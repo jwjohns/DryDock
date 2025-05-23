@@ -152,4 +152,5 @@ After running the appropriate script(s) and configuring GitHub Secrets:
 *   You can now run the Drydock workflow (`.github/workflows/deploy.yaml`).
 
 Refer to `USAGE.md` for detailed information on workflow inputs, cargo file structure, and secret management within Drydock.
+Additionally, for guidance on testing your configurations locally and simulating parts of the CI/CD workflow, see our **[Local Development and Testing Guide](LOCAL_DEVELOPMENT.md)**.
 ```

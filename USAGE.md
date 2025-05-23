@@ -14,6 +14,8 @@ The workflow performs the following key operations:
 5. Deploys Terraform infrastructure.
 6. Deploys Helm charts to Kubernetes.
 
+For tips on how to test and iterate on your configurations locally before running the workflow, please see the **[Local Development and Testing Guide](LOCAL_DEVELOPMENT.md)**.
+
 ## Configuration
 
 **Note:** Before proceeding with the configuration below, ensure you have set up the necessary cloud provider resources using our **[Drydock Bootstrapping Guide](BOOTSTRAPPING.md)**. That guide will help you create the required infrastructure and will provide some of the GitHub Secret values mentioned here.
