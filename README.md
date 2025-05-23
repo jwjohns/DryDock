@@ -52,9 +52,10 @@ To begin using Drydock, you first need to set up the necessary resources in your
 
 We provide bootstrapping scripts to help automate this initial setup. Please refer to our:
 
-- **[Drydock Bootstrapping Guide](BOOTSTRAPPING.md)**
+- **[Drydock Bootstrapping Guide](BOOTSTRAPPING.md)**: For initial cloud environment setup.
+- **[Local Development and Testing Guide](LOCAL_DEVELOPMENT.md)**: For tips on local testing and simulating the workflow.
 
-Once your cloud environment is bootstrapped and you have configured the required GitHub Secrets as output by the scripts, refer to the [Drydock Workflow Usage and Configuration Guide](USAGE.md) for details on running the deployment workflow and managing your cargo files.
+Once your cloud environment is bootstrapped (see the Bootstrapping Guide) and you have configured the required GitHub Secrets, refer to the [Drydock Workflow Usage and Configuration Guide](USAGE.md) for details on running the deployment workflow and managing your cargo files.
 
 ---
 
