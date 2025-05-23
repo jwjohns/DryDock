@@ -34,6 +34,24 @@ jobs:
       ENV_TARGET: ${{ github.event.inputs.environment || 'dev' }} # Default to dev if not manually triggered
 
     steps:
+      - name: Initialize Job Summary
+        run: echo "" > $GITHUB_STEP_SUMMARY # Clear any previous content
+
+      - name: Record Workflow Details in Summary
+        run: |
+          echo "# Drydock Deployment Summary :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Workflow Details" >> $GITHUB_STEP_SUMMARY
+          echo "- **Trigger:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Run ID:** [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+          echo "- **Repository:** ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch/Ref:** ${{ github.ref }}" >> $GITHUB_STEP_SUMMARY
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "- **Commit SHA:** \`$SHORT_SHA\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cloud Target:** ${{ env.CLOUD_TARGET }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment Target:** ${{ env.ENV_TARGET }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY # Add a blank line for spacing before next section
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -118,12 +136,25 @@ jobs:
           echo "Helm Overrides Contents (first 10 lines):"
           head -n 10 "${{ steps.set_paths.outputs.helm_cargo_dest }}" || true # Use || true to prevent failure if file is empty or very short
 
+      - name: Add Helm Status Header to Summary
+        run: echo "### Helm" >> $GITHUB_STEP_SUMMARY
+
       - name: Helm Lint
+        id: helm_lint
         run: |
           helm lint ./helm/charts/example \
             -f ./helm/hull/values.yaml \
             -f ${{ steps.set_paths.outputs.helm_cargo_dest }} \
             -f helm/cargo/secrets.yaml
+
+      - name: Record Helm Lint Status
+        if: always()
+        run: |
+          if [ "${{ steps.helm_lint.outcome }}" == "success" ]; then
+            echo "- **Lint:** :white_check_mark: Successful" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Lint:** :x: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
 
       - name: Pull Secrets
         run: |
@@ -198,6 +229,78 @@ jobs:
           echo "Helm secrets (first 5 lines):"
           head -n 5 helm/cargo/secrets.yaml || true
 
+      - name: Record Configuration File Status in Summary
+        run: |
+          echo "## Configuration Files" >> $GITHUB_STEP_SUMMARY
+
+          TF_CARGO_DEST="${{ steps.set_paths.outputs.tf_cargo_dest }}"
+          HELM_CARGO_DEST="${{ steps.set_paths.outputs.helm_cargo_dest }}"
+          TF_SECRETS_FILE="terraform/cargo/secrets.auto.tfvars"
+          HELM_SECRETS_FILE="helm/cargo/secrets.yaml"
+
+          # Terraform Cargo
+          TF_CARGO_SOURCE_MSG=""
+          if [ "${{ env.CLOUD_TARGET }}" == "gcp" ]; then
+            TF_CARGO_SOURCE_MSG="Source: gs://${{ secrets.GCP_CARGO_BUCKET }}/terraform/${{ env.ENV_TARGET }}.tfvars"
+          elif [ "${{ env.CLOUD_TARGET }}" == "azure" ]; then
+            TF_CARGO_SOURCE_MSG="Source Blob: terraform/azure-${{ env.ENV_TARGET }}.tfvars (Account: ${{ secrets.AZURE_CARGO_STORAGE_ACCOUNT }}, Container: ${{ secrets.AZURE_CARGO_CONTAINER }})"
+          fi
+
+          if [ -f "${TF_CARGO_DEST}" ] && [ -s "${TF_CARGO_DEST}" ]; then
+            echo "- **Terraform Cargo (\`${TF_CARGO_DEST}\`):** :white_check_mark: Pulled successfully" >> $GITHUB_STEP_SUMMARY
+          elif [ -f "${TF_CARGO_DEST}" ]; then
+            echo "- **Terraform Cargo (\`${TF_CARGO_DEST}\`):** :warning: Pulled but is empty" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Terraform Cargo (\`${TF_CARGO_DEST}\`):** :x: Not found/Pull failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ -n "${TF_CARGO_SOURCE_MSG}" ]; then
+            echo "  - ${TF_CARGO_SOURCE_MSG}" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Helm Overrides
+          HELM_CARGO_SOURCE_MSG=""
+          if [ "${{ env.CLOUD_TARGET }}" == "gcp" ]; then
+            HELM_CARGO_SOURCE_MSG="Source: gs://${{ secrets.GCP_CARGO_BUCKET }}/helm/${{ env.ENV_TARGET }}.override.yaml"
+          elif [ "${{ env.CLOUD_TARGET }}" == "azure" ]; then
+            HELM_CARGO_SOURCE_MSG="Source Blob: helm/azure-${{ env.ENV_TARGET }}.override.yaml (Account: ${{ secrets.AZURE_CARGO_STORAGE_ACCOUNT }}, Container: ${{ secrets.AZURE_CARGO_CONTAINER }})"
+          fi
+
+          if [ -f "${HELM_CARGO_DEST}" ] && [ -s "${HELM_CARGO_DEST}" ]; then
+            echo "- **Helm Overrides (\`${HELM_CARGO_DEST}\`):** :white_check_mark: Pulled successfully" >> $GITHUB_STEP_SUMMARY
+          elif [ -f "${HELM_CARGO_DEST}" ]; then
+            echo "- **Helm Overrides (\`${HELM_CARGO_DEST}\`):** :warning: Pulled but is empty" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Helm Overrides (\`${HELM_CARGO_DEST}\`):** :x: Not found/Pull failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ -n "${HELM_CARGO_SOURCE_MSG}" ]; then
+            echo "  - ${HELM_CARGO_SOURCE_MSG}" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Terraform Secrets
+          if [ -f "${TF_SECRETS_FILE}" ] && [ -s "${TF_SECRETS_FILE}" ]; then
+            echo "- **Terraform Secrets (\`${TF_SECRETS_FILE}\`):** :white_check_mark: Pulled and used" >> $GITHUB_STEP_SUMMARY
+          elif [ -f "${TF_SECRETS_FILE}" ]; then # Exists but is empty (e.g. secret not found in vault, script created empty file)
+            echo "- **Terraform Secrets (\`${TF_SECRETS_FILE}\`):** :warning: Not found in vault or empty" >> $GITHUB_STEP_SUMMARY
+          else # Should not happen if Pull Secrets step initializes it, but good for robustness
+            echo "- **Terraform Secrets (\`${TF_SECRETS_FILE}\`):** :x: Not found (unexpected)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Helm Secrets
+          if [ -f "${HELM_SECRETS_FILE}" ] && [ -s "${HELM_SECRETS_FILE}" ]; then
+            echo "- **Helm Secrets (\`${HELM_SECRETS_FILE}\`):** :white_check_mark: Pulled and used" >> $GITHUB_STEP_SUMMARY
+          elif [ -f "${HELM_SECRETS_FILE}" ]; then
+            echo "- **Helm Secrets (\`${HELM_SECRETS_FILE}\`):** :warning: Not found in vault or empty" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Helm Secrets (\`${HELM_SECRETS_FILE}\`):** :x: Not found (unexpected)" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY # Add a blank line for spacing
+
+      - name: Add Terraform Status Header to Summary
+        run: |
+          echo "## Deployment Steps Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Terraform" >> $GITHUB_STEP_SUMMARY
+
       # --- Terraform Steps --- (Uses Hull Dir from set_paths step)
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -206,14 +309,43 @@ jobs:
         id: init
         run: terraform -chdir=${{ steps.set_paths.outputs.tf_hull_dir }} init
 
+      - name: Record Terraform Init Status
+        if: always() # Run even if previous steps failed, to record the actual outcome
+        run: |
+          if [ "${{ steps.init.outcome }}" == "success" ]; then
+            echo "- **Init:** :white_check_mark: Successful" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Init:** :x: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
       - name: Terraform Format Check
+        id: tf_fmt_check
         run: terraform -chdir=${{ steps.set_paths.outputs.tf_hull_dir }} fmt --check
 
+      - name: Record Terraform Format Check Status
+        if: always()
+        run: |
+          if [ "${{ steps.tf_fmt_check.outcome }}" == "success" ]; then
+            echo "- **Format Check:** :white_check_mark: Successful" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Format Check:** :x: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
       - name: Terraform Validate
+        id: tf_validate
         run: |
           terraform -chdir=${{ steps.set_paths.outputs.tf_hull_dir }} validate \
             -var-file=../cargo/environment.auto.tfvars \
             -var-file=../cargo/secrets.auto.tfvars
+
+      - name: Record Terraform Validate Status
+        if: always()
+        run: |
+          if [ "${{ steps.tf_validate.outcome }}" == "success" ]; then
+            echo "- **Validate:** :white_check_mark: Successful" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Validate:** :x: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
 
       - name: Terraform Plan
         id: plan
@@ -223,9 +355,31 @@ jobs:
             -var-file=../cargo/secrets.auto.tfvars \
             -out=tfplan
 
+      - name: Record Terraform Plan Status
+        if: always()
+        run: |
+          if [ "${{ steps.plan.outcome }}" == "success" ]; then
+            echo "- **Plan:** :white_check_mark: Successful" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Plan:** :x: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
       - name: Terraform Apply
         id: apply
         run: terraform -chdir=${{ steps.set_paths.outputs.tf_hull_dir }} apply -auto-approve tfplan
+
+      - name: Record Terraform Apply Status
+        if: always()
+        run: |
+          if [ "${{ steps.apply.outcome }}" == "success" ]; then
+            echo "- **Apply:** :white_check_mark: Successful" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Apply:** :x: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY # Add a blank line for spacing before next section
+
+      - name: Add Helm Status Header to Summary
+        run: echo "### Helm" >> $GITHUB_STEP_SUMMARY
 
       # --- Helm Steps --- (May need cloud-specific context setup)
       - name: Setup Helm
@@ -234,6 +388,7 @@ jobs:
       # Placeholder: Add step to configure kubectl context
       # This step WILL LIKELY need to be conditional based on CLOUD_TARGET
       - name: Get K8s Credentials
+        id: get_k8s_creds
         run: |
           echo "Getting K8s credentials for ${{ env.CLOUD_TARGET }} environment ${{ env.ENV_TARGET }}"
           if [ "${{ env.CLOUD_TARGET }}" == "azure" ]; then
@@ -246,7 +401,17 @@ jobs:
           fi
           echo "Kubeconfig setup complete for ${{ env.CLOUD_TARGET }}."
 
+      - name: Record Get K8s Credentials Status
+        if: always()
+        run: |
+          if [ "${{ steps.get_k8s_creds.outcome }}" == "success" ]; then
+            echo "- **Get K8s Credentials:** :white_check_mark: Successful" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Get K8s Credentials:** :x: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
       - name: Helm Deploy/Upgrade
+        id: helm_deploy
         run: |
           helm upgrade --install ${{ env.CLOUD_TARGET }}-${{ env.ENV_TARGET }}-release ./helm/charts/example \
             -f ./helm/hull/values.yaml \
@@ -255,6 +420,38 @@ jobs:
             --namespace my-namespace \
             --create-namespace
           # Adjust release name, namespace as needed
+
+      - name: Record Helm Deploy/Upgrade Status
+        if: always()
+        run: |
+          if [ "${{ steps.helm_deploy.outcome }}" == "success" ]; then
+            echo "- **Deploy/Upgrade:** :white_check_mark: Successful" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Deploy/Upgrade:** :x: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY # Add a blank line for spacing
+
+      - name: Add Useful Links to Summary
+        run: |
+          echo "## Useful Links" >> $GITHUB_STEP_SUMMARY
+          echo "- [View Full Workflow Run Logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ env.CLOUD_TARGET }}" == "gcp" ]; then
+            if [ -n "${{ secrets.GCP_PROJECT_ID }}" ]; then
+              echo "- [GCP Project Console](https://console.cloud.google.com/home/dashboard?project=${{ secrets.GCP_PROJECT_ID }}) (Project: \`${{ secrets.GCP_PROJECT_ID }}\`)" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "- GCP Project Console: (GCP_PROJECT_ID secret not set)" >> $GITHUB_STEP_SUMMARY
+            fi
+          elif [ "${{ env.CLOUD_TARGET }}" == "azure" ]; then
+            # Note: A direct link to a specific subscription or resource group dashboard is complex to build generically.
+            # Linking to the main portal is safer. Tenant ID can be used for context if available.
+            if [ -n "${{ secrets.AZURE_TENANT_ID }}" ]; then
+              echo "- [Azure Portal](https://portal.azure.com/#@${{ secrets.AZURE_TENANT_ID }}/dashboard/overview) (Tenant: \`${{ secrets.AZURE_TENANT_ID }}\`)" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "- [Azure Portal](https://portal.azure.com)" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY # Final blank line for the summary
 
       - name: Cleanup Temporary Secret Files
         if: always()
