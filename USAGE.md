@@ -121,3 +121,5 @@ You need to create secrets in your cloud provider's vault with specific names an
 2.  Ensure your cargo files are correctly named and uploaded to the specified GCS bucket or Azure Blob container.
 3.  Trigger the workflow via a push to the configured branch (e.g., `main`) or by manual dispatch (`Actions -> Drydock Multi-Cloud Deploy -> Run workflow`).
     *   When dispatching manually, specify the `cloud` (`gcp` or `azure`) and `environment` (e.g., `dev`).
+
+After each workflow run, you can find a detailed summary of the key operations, statuses, and useful links directly on the GitHub Actions run summary page. This provides a quick overview of the deployment without needing to go through all the logs.
