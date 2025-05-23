@@ -1,150 +1,163 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-TF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Drydock - Git-Native Deployments for Secure Infrastructure</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+    <title>Drydock: Git-Native Deployments for Secure, Scalable Infrastructure</title>
+    <meta name="description" content="Drydock: Secure, Git-native infrastructure deployments for GCP & Azure. Uses Workload Identity Federation (WIF), Terraform, Helm & GitHub Actions. Modernize your CI/CD.">
+    <meta name="keywords" content="Drydock, GitOps, Workload Identity Federation, WIF, Secure CI/CD, Multi-cloud CI/CD, GCP, Azure, Terraform, Helm, GitHub Actions, Jenkins Migration, IaC">
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Drydock",
+      "description": "Drydock is a Git-native deployment framework for secure, scalable infrastructure across GCP and Azure, using Workload Identity Federation (WIF), Terraform, Helm, and GitHub Actions.",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "Cross-platform (Cloud, GitHub Actions runners)",
+      "softwareHelp": {
+        "@type": "CreativeWork",
+        "name": "Drydock Documentation - Usage Guide",
+        "url": "USAGE.md" // Relative link, assumes files are served
+      },
+      "codeRepository": "https://github.com/YOUR_ORG/YOUR_REPO", // Replace YOUR_ORG/YOUR_REPO
+      "license": "https://opensource.org/licenses/MIT", // Replace if different
+      "keywords": "Drydock, GitOps, Workload Identity Federation, WIF, Secure CI/CD, Multi-cloud CI/CD, GCP, Azure, Terraform, Helm, GitHub Actions, Jenkins Migration, IaC, Cloud Automation",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "index.html" // Relative link to the page itself
+      }
+      // "creator": { "@type": "Organization", "name": "YOUR_ORG" }, // Replace YOUR_ORG
+    }
+    </script>
     <style>
-        /* Simple custom styles */
-        .logo {
-            max-width: 100px;
-            margin-bottom: 1rem;
-        }
-        header {
-            text-align: center;
-            padding: 2rem 0 1rem 0;
-            border-bottom: 1px solid var(--pico-muted-border-color);
-            margin-bottom: 2rem;
-        }
-        section {
-            margin-bottom: 3rem;
-        }
-        article {
-            padding: 1.5rem;
-            border: 1px solid var(--pico-card-border-color);
-            border-radius: var(--pico-card-border-radius);
-            background-color: var(--pico-card-background-color);
-            margin-bottom: 1.5rem;
-        }
-        hgroup h2 {
-            margin-bottom: 0.5rem;
-        }
-        hgroup h3 {
-            color: var(--pico-muted-color);
-            margin-bottom: 1rem;
-        }
-        ul {
-             list-style: disc;
-             padding-left: 1.5rem;
-        }
-        li {
-            margin-bottom: 0.5rem;
-        }
-        .get-started-buttons div[role="group"] {
-            display: flex;
-            gap: 1rem; /* Add space between buttons */
-            justify-content: center;
-        }
-        footer {
-            text-align: center; 
-            margin-top: 4rem; 
-            padding: 1rem; 
-            font-size: 0.9rem; 
-            color: var(--pico-muted-color);
-            border-top: 1px solid var(--pico-muted-border-color);
-        }
+        body { font-family: Arial, sans-serif; line-height: 1.6; margin: 0; padding: 0; color: #333; }
+        .container { max-width: 960px; margin: 0 auto; padding: 20px; }
+        header { text-align: center; padding: 40px 20px; background-color: #f4f4f4; border-bottom: 1px solid #ddd; }
+        header img.logo { max-width: 100px; margin-bottom: 15px; }
+        header h1 { margin: 0 0 10px 0; font-size: 2.5em; }
+        header .tagline { font-size: 1.2em; color: #555; margin-bottom: 10px; }
+        header .intro { font-size: 1em; color: #666; max-width: 700px; margin: 0 auto 20px auto; }
+        nav { text-align: center; background-color: #333; padding: 10px 0; }
+        nav a { color: white; margin: 0 15px; text-decoration: none; font-weight: bold; }
+        nav a:hover { text-decoration: underline; }
+        section { padding: 30px 20px; border-bottom: 1px solid #eee; }
+        section h2 { text-align: center; margin-bottom: 30px; font-size: 2em; }
+        .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+        .feature-item { background-color: #f9f9f9; padding: 20px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .feature-item h3 { margin-top: 0; color: #333; }
+        .cta-list { list-style: none; padding: 0; text-align: center; }
+        .cta-list li { margin-bottom: 15px; }
+        .cta-list a { display: inline-block; background-color: #007bff; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-size: 1.1em; transition: background-color 0.3s ease; }
+        .cta-list a:hover { background-color: #0056b3; }
+        .docs-links ul { list-style: none; padding: 0; }
+        .docs-links li a { text-decoration: none; color: #007bff; }
+        .docs-links li a:hover { text-decoration: underline; }
+        footer { text-align: center; padding: 20px; background-color: #333; color: white; font-size: 0.9em; }
+        footer a { color: #00bfff; text-decoration: none; }
+        footer a:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
+
+    <header>
+        <img src="logo.png" alt="Drydock Logo" class="logo">
+        <h1>Drydock</h1>
+        <p class="tagline">Git-Native Deployments for Secure, Scalable Infrastructure across GCP and Azure.</p>
+        <p class="intro">
+            Drydock is an open source deployment framework designed to separate static infrastructure ("the hull") 
+            from dynamic configuration and secrets ("the cargo"). It enables secure, scalable, and reproducible 
+            deployments using GitHub Actions, Terraform, Helm, and Workload Identity Federation (WIF), 
+            especially for teams moving away from legacy Jenkins-based deploys.
+        </p>
+    </header>
+
+    <nav>
+        <a href="#features">Features</a>
+        <a href="#getting-started">Get Started</a>
+        <a href="#documentation">Documentation</a>
+        <a href="https://github.com/YOUR_ORG/YOUR_REPO" target="_blank">GitHub Repo</a> <!-- Replace YOUR_ORG/YOUR_REPO -->
+    </nav>
+
     <div class="container">
-        <header>
-            <img src="logo.png" alt="Drydock Logo" class="logo">
-            <h1>Drydock</h1>
-            <p><em>Separating the "Hull" (Static Infrastructure) from the "Cargo" (Dynamic Configuration) across <strong>GCP and Azure</strong>.</em></p>
-        </header>
 
-        <main>
-
-            <section id="mission">
-                <hgroup>
-                    <h2>Mission</h2>
-                    <h3>What is Drydock?</h3>
-                </hgroup>
-                <p>
-                    Drydock is an open source deployment framework designed to separate static infrastructure ("the hull") 
-                    from dynamic configuration and secrets ("the cargo"), enabling secure, scalable, and reproducible deployments 
-                    across GCP and Azure (initially) using GitHub Actions, Terraform, Helm, and Workload Identity Federation (WIF).
-                </p>
-                <p>
-                    It's purpose-built for modern teams moving away from legacy Jenkins-based deploys, toward 
-                    <strong>zero-key, auditable, Git-native automation</strong>.
-                </p>
-            </section>
-
-            <section id="philosophy">
-                 <hgroup>
-                    <h2>Core Philosophy</h2>
-                    <h3>Hull vs. Cargo</h3>
-                </hgroup>
-                <p>In a shipyard drydock, the hull is constructed before it's ever launched into water. Drydock adopts this metaphor:</p>
-                <ul>
-                    <li><strong>The Hull</strong> = statically defined, versioned infrastructure & Helm templates (managed in Git).</li>
-                    <li><strong>The Cargo</strong> = runtime values, secrets, and overrides injected securely at deployment time (fetched from Secret Manager, Key Vault, GCS, Blob Storage, etc.).</li>
-                </ul>
-                <p>This separation ensures your infrastructure code is clean and secrets are never stored in your repository.</p>
-            </section>
-            
-            <section id="features">
-                <hgroup>
-                    <h2>Key Features</h2>
-                    <h3>Why Use Drydock?</h3>
-                </hgroup>
-                <article>
-                    <ul>
-                        <li><strong>Workload Identity Federation (WIF):</strong> Eliminate long-lived cloud credentials in CI/CD for GCP and Azure.</li>
-                        <li><strong>Environment-specific Layering:</strong> Use Terraform <code>.tfvars</code> and Helm overrides for distinct configurations per environment.</li>
-                        <li><strong>Secure Runtime Injection:</strong> "Cargo" (secrets, runtime config) is fetched and injected only at deploy-time.</li>
-                        <li><strong>GitHub Actions Native:</strong> Designed with composable GitHub Actions workflows at its core.</li>
-                        <li><strong>Multi-Cloud Ready:</strong> Supports parallel definitions for GCP and Azure infrastructure.</li>
-                        <li><strong>Fleet Deployment Support:</strong> Structure adaptable for deploying across many stores, regions, or environments.</li>
-                    </ul>
-                </article>
-            </section>
-
-            <section id="workflow">
-                <hgroup>
-                    <h2>How it Works</h2>
-                    <h3>Simplified Workflow</h3>
-                </hgroup>
-                <ol>
-                    <li>Commit static templates (Terraform Hulls, Helm Charts) to Git.</li>
-                    <li>Trigger GitHub Actions (on push, tag, or manual dispatch).</li>
-                    <li>Action authenticates to the target cloud (GCP/Azure) using WIF.</li>
-                    <li>Action fetches runtime "Cargo" (<code>.tfvars</code>, Helm overrides, secrets) from secure sources (Secret Manager, Key Vault, GCS, etc.).</li>
-                    <li>Action runs <code>terraform apply</code> using the appropriate Hull + Cargo.</li>
-                    <li>Action runs <code>helm upgrade --install</code> using the base chart + Hull values + Cargo overrides.</li>
-                </ol>
-            </section>
-
-             <section id="why">
-                <h2>Why Drydock?</h2>
-                <p>Most teams hack this flow together in CI — Drydock makes it <strong>a pattern, not a pile of scripts</strong>. It's Git-native, secure by default using WIF, modular, and designed for multi-cloud, multi-environment scale.</p>
-            </section>
-
-            <section id="get-started" class="get-started-buttons">
-                <h2>Get Started</h2>
-                <div role="group">
-                    <a href="https://github.com/jwjohns/DryDock" role="button">View on GitHub</a>
-                    <a href="https://github.com/jwjohns/DryDock/blob/main/README.md" role="button" class="secondary">Read the Docs (README)</a>
+        <section id="features">
+            <h2>Why Drydock? Key Features & Philosophy</h2>
+            <div class="features-grid">
+                <div class="feature-item">
+                    <h3>Workload Identity Federation</h3>
+                    <p>Eliminates long-lived cloud secrets in CI/CD by using OIDC tokens for secure, keyless authentication to GCP and Azure.</p>
                 </div>
-            </section>
+                <div class="feature-item">
+                    <h3>Git-Native Approach</h3>
+                    <p>Manage your infrastructure and deployments as code, with versioned, auditable changes tracked in Git.</p>
+                </div>
+                <div class="feature-item">
+                    <h3>Hull & Cargo Model</h3>
+                    <p>Decouples static infrastructure templates ("the Hull") from dynamic, environment-specific configurations ("the Cargo").</p>
+                </div>
+                <div class="feature-item">
+                    <h3>Multi-Cloud Ready</h3>
+                    <p>Native support for GCP and Azure using industry-standard tools like Terraform and Helm.</p>
+                </div>
+                <div class="feature-item">
+                    <h3>Developer Empowerment</h3>
+                    <p>CI/CD configuration lives in your repository, supported by local development aids for easier testing and iteration.</p>
+                </div>
+                <div class="feature-item">
+                    <h3>Secure by Design</h3>
+                    <p>Built with modern security best practices at its core, reducing attack surfaces and improving compliance.</p>
+                </div>
+            </div>
+            <div style="text-align: center; margin-top: 30px;">
+                <p><strong>Core Philosophy:</strong> In a shipyard drydock, the hull is constructed before it's launched. Drydock adopts this: 
+                The "Hull" is your static, versioned infrastructure, while "Cargo" is the runtime values and secrets injected at deployment.</p>
+            </div>
+        </section>
 
-        </main>
+        <section id="getting-started">
+            <h2>Get Started with Drydock</h2>
+            <ul class="cta-list">
+                <li><a href="BOOTSTRAPPING.md">1. Bootstrap Your Cloud Environment</a><br><p>Set up the necessary cloud resources quickly with our automated scripts.</p></li>
+                <li><a href="USAGE.md">2. Configure & Run Workflows</a><br><p>Learn how to set up GitHub Secrets, manage cargo, and run deployments.</p></li>
+                <li><a href="LOCAL_DEVELOPMENT.md">3. Develop & Test Locally</a><br><p>Tools and tips for local testing and simulating the workflow.</p></li>
+            </ul>
+        </section>
 
-        <footer>
-            &copy; 2024 Drydock Project Contributors.
-        </footer>
+        <section id="documentation">
+            <h2>Explore the Documentation</h2>
+            <div class="docs-links">
+                <ul>
+                    <li><strong><a href="README.md">README.md</a>:</strong> Full project overview, architecture, and mission.</li>
+                    <li><strong><a href="USAGE.md">USAGE.md</a>:</strong> Detailed workflow usage, GitHub Secrets, cargo and cloud secret setup.</li>
+                    <li><strong><a href="BOOTSTRAPPING.md">BOOTSTRAPPING.md</a>:</strong> Step-by-step guide for initial cloud environment setup.</li>
+                    <li><strong><a href="LOCAL_DEVELOPMENT.md">LOCAL_DEVELOPMENT.md</a>:</strong> Guide for local development, testing, and simulation.</li>
+                    <li><strong><a href="MIGRATING_FROM_JENKINS.md">MIGRATING_FROM_JENKINS.md</a>:</strong> Comprehensive guide for transitioning from Jenkins.</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="community">
+            <h2>Join the Community & Contribute</h2>
+            <p style="text-align:center;">Drydock is an open source project. We welcome contributions, feedback, and issue reporting!</p>
+            <p style="text-align:center;">
+                <a href="https://github.com/YOUR_ORG/YOUR_REPO/issues" target="_blank" style="margin-right:10px;">Report an Issue</a> | 
+                <a href="https://github.com/YOUR_ORG/YOUR_REPO/discussions" target="_blank">Join Discussions</a> <br>
+                <!-- Replace YOUR_ORG/YOUR_REPO with actual links. Consider using the shield.io badges from README if desired, though they are images. -->
+            </p>
+        </section>
+
     </div>
+
+    <footer>
+        <p>Released under the MIT License. <!-- Replace if different --></p>
+        <p><a href="https://github.com/YOUR_ORG/YOUR_REPO" target="_blank">Drydock GitHub Repository</a></p> <!-- Replace YOUR_ORG/YOUR_REPO -->
+        <!-- <p>&copy; 2023 YOUR_ORG</p> --> <!-- Replace YOUR_ORG and update year -->
+    </footer>
+
 </body>
-</html> 
+</html>
