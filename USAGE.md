@@ -16,6 +16,8 @@ The workflow performs the following key operations:
 
 ## Configuration
 
+**Note:** Before proceeding with the configuration below, ensure you have set up the necessary cloud provider resources using our **[Drydock Bootstrapping Guide](BOOTSTRAPPING.md)**. That guide will help you create the required infrastructure and will provide some of the GitHub Secret values mentioned here.
+
 To use this workflow, you need to configure several GitHub Secrets in your repository settings and set up cloud storage for your cargo files.
 
 ### 1. GitHub Secrets
