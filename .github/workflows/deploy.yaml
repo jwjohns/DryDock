@@ -24,14 +24,46 @@ on:
 permissions:
   contents: read
   id-token: write # Required for BOTH GCP and Azure WIF
+  security-events: write # Required for CodeQL to upload results
 
 jobs:
+  # Job: SAST Scan (CodeQL)
+  # Purpose: Performs Static Application Security Testing using CodeQL.
+  # This scan analyzes the source code for potential security vulnerabilities
+  # before any deployment occurs. The 'deploy' job depends on the success of this scan.
+  sast_scan:
+    name: SAST Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: go, javascript, python, ruby # Add or remove languages as needed
+          # Optional: specify a config file, queries, etc.
+          # config-file: ./.github/codeql/codeql-config.yml
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+        # If autobuild fails for your project, replace it with custom build steps.
+        # For example, if you have a Python project:
+        # run: |
+        #   pip install -r requirements.txt
+        #   # Add any other build commands here
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
   deploy:
     runs-on: ubuntu-latest
+    needs: sast_scan # Make deploy dependent on sast_scan
     # Set environment variables for easy access in steps
     env:
       CLOUD_TARGET: ${{ github.event.inputs.cloud || 'gcp' }} # Default to gcp if not manually triggered
       ENV_TARGET: ${{ github.event.inputs.environment || 'dev' }} # Default to dev if not manually triggered
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }} # Defined for Slack notifications; ensure this secret is set in repo settings.
 
     steps:
       - name: Initialize Job Summary
@@ -47,10 +79,18 @@ jobs:
           echo "- **Repository:** ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Branch/Ref:** ${{ github.ref }}" >> $GITHUB_STEP_SUMMARY
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          echo "- **Commit SHA:** \`$SHORT_SHA\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit SHA:** <https://github.com/${{ github.repository }}/commit/${{ github.sha }}|\`$SHORT_SHA\`>" >> $GITHUB_STEP_SUMMARY
           echo "- **Cloud Target:** ${{ env.CLOUD_TARGET }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Environment Target:** ${{ env.ENV_TARGET }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY # Add a blank line for spacing before next section
+          SAST_STATUS="${{ needs.sast_scan.result }}"
+          if [ "$SAST_STATUS" == "success" ]; then
+            echo "- **CodeQL SAST Scan:** :white_check_mark: Success" >> $GITHUB_STEP_SUMMARY
+          elif [ "$SAST_STATUS" == "failure" ]; then
+            echo "- **CodeQL SAST Scan:** :x: Failure" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **CodeQL SAST Scan:** :warning: $SAST_STATUS" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -136,9 +176,7 @@ jobs:
           echo "Helm Overrides Contents (first 10 lines):"
           head -n 10 "${{ steps.set_paths.outputs.helm_cargo_dest }}" || true # Use || true to prevent failure if file is empty or very short
 
-      - name: Add Helm Status Header to Summary
-        run: echo "### Helm" >> $GITHUB_STEP_SUMMARY
-
+      # Helm Lint is run early for fast feedback, its status is recorded later in the summary.
       - name: Helm Lint
         id: helm_lint
         run: |
@@ -347,6 +385,19 @@ jobs:
             echo "- **Validate:** :x: Failed" >> $GITHUB_STEP_SUMMARY
           fi
 
+      # Step: Run tfsec Security Scan
+      # Purpose: Executes tfsec, a static analysis tool for Terraform code, to detect potential
+      # security misconfigurations in the Infrastructure as Code.
+      # The workflow will fail at this step if tfsec finds any issues, preventing Terraform plan and apply.
+      - name: Run tfsec Security Scan
+        id: tfsec_scan_step
+        uses: aquasecurity/tfsec-action@v1.0.0
+        with:
+          working_directory: ${{ steps.set_paths.outputs.tf_hull_dir }}
+          # sarif_file: tfsec.sarif # Uncomment for SARIF upload
+
+      # Note: The "Record tfsec Scan Status" step is now part of the "Pre-Deployment Checks" summary section, created later.
+
       - name: Terraform Plan
         id: plan
         run: |
@@ -376,12 +427,98 @@ jobs:
           else
             echo "- **Apply:** :x: Failed" >> $GITHUB_STEP_SUMMARY
           fi
-          echo "" >> $GITHUB_STEP_SUMMARY # Add a blank line for spacing before next section
+          # Blank line will be handled by the Helm Rollback status step or next section header.
 
-      - name: Add Helm Status Header to Summary
+      # --- Pre-Deployment Security and Config Checks ---
+      - name: Add Pre-Deployment Checks Header to Summary
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY # Ensure separation from previous section
+          echo "## Pre-Deployment Checks" >> $GITHUB_STEP_SUMMARY
+
+      - name: Record tfsec IaC Scan Status in Summary
+        if: always()
+        run: |
+          if [ "${{ steps.tfsec_scan_step.outcome }}" == "success" ]; then
+            echo "- **tfsec IaC Scan:** :white_check_mark: Successful (No issues found or issues below threshold)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **tfsec IaC Scan:** :x: Failed (Issues found)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      # Step: Scan Container Image(s) with Trivy
+      # Purpose: Performs vulnerability scanning on container images using Trivy.
+      # IMPORTANT: The 'image-ref' input currently uses a placeholder and MUST be updated with the
+      # actual image name(s) and tag(s) to be scanned for this step to be effective.
+      # It is set to 'continue-on-error: true' to prevent pipeline blockage while unconfigured.
+      # If vulnerabilities of CRITICAL or HIGH severity are found, the step will be marked as failed
+      # (due to exit-code: '1'), but the overall workflow will continue due to 'continue-on-error: true'.
+      - name: Scan Container Image(s) with Trivy
+        id: trivy_scan_step
+        uses: aquasecurity/trivy-action@0.18.0
+        continue-on-error: true
+        with:
+          image-ref: 'your-org/your-app:${{ github.sha }}' # <-- ### TODO: REPLACE THIS PLACEHOLDER ###
+          format: 'template'
+          template: '@/contrib/sarif.tpl'
+          output: 'trivy-results.sarif'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Record Trivy Image Scan Status in Summary
+        if: always()
+        run: |
+          IMAGE_REF_USED="${{ steps.trivy_scan_step.inputs.image-ref }}"
+          echo "- **Trivy Image Scan:**" >> $GITHUB_STEP_SUMMARY
+          if [[ "${IMAGE_REF_USED}" == "your-org/your-app:${{ github.sha }}" ]] || [[ -z "${IMAGE_REF_USED}" ]]; then
+            echo "  - :warning: Skipped/Not Configured (Placeholder image reference found or no image specified). Update 'image-ref' in the workflow." >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.trivy_scan_step.outcome }}" == "success" ]; then
+            if [ -s trivy-results.sarif ]; then
+              if grep -q '"level": "error"' trivy-results.sarif || grep -q '"level": "warning"' trivy-results.sarif; then
+                echo "  - :x: Vulnerabilities found by Trivy in '${IMAGE_REF_USED}'. See 'Upload Trivy SARIF' artifact or Security tab." >> $GITHUB_STEP_SUMMARY
+              else
+                echo "  - :white_check_mark: Successful (No CRITICAL or HIGH vulnerabilities found by Trivy in '${IMAGE_REF_USED}')." >> $GITHUB_STEP_SUMMARY
+              fi
+            else
+               echo "  - :warning: Scan completed by Trivy but no results SARIF file was generated for '${IMAGE_REF_USED}'. Check Trivy logs." >> $GITHUB_STEP_SUMMARY
+            fi
+          elif [ "${{ steps.trivy_scan_step.outcome }}" == "failure" ]; then
+             echo "  - :x: Failed (Trivy scan itself failed for '${IMAGE_REF_USED}' or found vulnerabilities if not continue-on-error). See 'Upload Trivy SARIF' artifact or Security tab." >> $GITHUB_STEP_SUMMARY
+          else
+             echo "  - :large_blue_diamond: Trivy scan status undetermined for '${IMAGE_REF_USED}'. Outcome: ${{ steps.trivy_scan_step.outcome }}" >> $GITHUB_STEP_SUMMARY
+          fi
+          # No final blank line here, next section header will provide space or it's the end of this section.
+
+      - name: Check Trivy SARIF file existence # Renamed from "Check SARIF file existence"
+        id: filestatus # ID is kept the same
+        if: always()
+        run: |
+          if [ -f trivy-results.sarif ]; then
+            echo "trivy-results-sarif=exists" >> $GITHUB_OUTPUT # Output name unchanged
+          else
+            echo "trivy-results-sarif=missing" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload Trivy SARIF
+        if: always() && (steps.trivy_scan_step.outcome == 'success' || steps.trivy_scan_step.outcome == 'failure') && steps.filestatus.outputs.trivy-results-sarif == 'exists'
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+        # Helper step to check file existence for the condition above
+      # --- Deployment Steps ---
+      - name: Add Deployment Steps Header to Summary # Renamed for clarity
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY # Ensure separation
+          echo "## Deployment Execution Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Terraform" >> $GITHUB_STEP_SUMMARY
+
+      # --- Terraform Steps --- are recorded under the header above by their individual "Record..." steps
+
+      # --- Helm Steps ---
+      - name: Add Helm Deployment Header to Summary # Renamed for clarity
         run: echo "### Helm" >> $GITHUB_STEP_SUMMARY
 
-      # --- Helm Steps --- (May need cloud-specific context setup)
       - name: Setup Helm
         uses: azure/setup-helm@v4
 
@@ -410,6 +547,15 @@ jobs:
             echo "- **Get K8s Credentials:** :x: Failed" >> $GITHUB_STEP_SUMMARY
           fi
 
+      - name: Record Helm Lint Status in Deployment Summary # Moved summary reporting for Helm Lint here
+        if: always()
+        run: |
+          if [ "${{ steps.helm_lint.outcome }}" == "success" ]; then
+            echo "- **Helm Chart Lint:** :white_check_mark: Successful" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Helm Chart Lint:** :x: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
       - name: Helm Deploy/Upgrade
         id: helm_deploy
         run: |
@@ -429,7 +575,39 @@ jobs:
           else
             echo "- **Deploy/Upgrade:** :x: Failed" >> $GITHUB_STEP_SUMMARY
           fi
-          echo "" >> $GITHUB_STEP_SUMMARY # Add a blank line for spacing
+          # No blank line here yet, rollback status will follow if applicable
+
+      # Step: Attempt Helm Rollback on Failure
+      # Purpose: Implements a basic rollback mechanism for Helm deployments.
+      # If the 'Helm Deploy/Upgrade' step fails, this step attempts to roll back
+      # the Helm release to its previous version to mitigate a failed deployment.
+      - name: Attempt Helm Rollback on Failure
+        id: helm_rollback_attempt # Give an ID to the rollback step
+        if: steps.helm_deploy.outcome == 'failure'
+        run: |
+          echo "Helm deploy failed. Attempting rollback..."
+          helm rollback ${{ env.CLOUD_TARGET }}-${{ env.ENV_TARGET }}-release --namespace my-namespace
+          # Consider adding --timeout and --wait flags if necessary
+          # Helm rollback will exit with non-zero status if it fails
+
+      - name: Record Helm Rollback Attempt Status
+        if: always() # Always run to record if rollback was attempted or skipped
+        run: |
+          # Check if the rollback step was even attempted (i.e., if helm_deploy failed)
+          if [ "${{ steps.helm_deploy.outcome }}" == 'failure' ]; then
+            if [ "${{ steps.helm_rollback_attempt.outcome }}" == "success" ]; then
+              echo "- **Helm Rollback:** :white_check_mark: Successful" >> $GITHUB_STEP_SUMMARY
+            else
+              # This means rollback was attempted but failed
+              echo "- **Helm Rollback:** :x: Failed (Attempted due to deploy failure, but rollback command also failed)" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            # This means helm_deploy was successful, so no rollback was attempted.
+            # We don't need to explicitly state "Rollback not attempted" unless desired for verbosity.
+            # The previous "Deploy/Upgrade: Successful" message is sufficient.
+            echo "" # Ensures a blank line after deploy status if successful
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY # Final blank line for Helm section
 
       - name: Add Useful Links to Summary
         run: |
